@@ -13,14 +13,24 @@ applyRE[matlab]='s/^/% /'
 applyRE[lua]='s/^/-- /'
 
 if [[ x$1 == x ]]; then
-    echo 'No style given, applying default "c"' >&2
-    STYLE="c"
+    echo 'Must provide comments style as first argument' >&2
+    exit 1
 elif [[ -v "applyRE[$1]" ]] ; then
     STYLE=$1
 else
     echo "Unknown style"
-    exit 1
+    exit 2
 fi
+
+if [[ x$2 == x ]]; then
+    # Apply to all files, excluding directories
+    FILES=$(find . -type f)
+else
+    D=$(dirname "$2")
+    F="${2#${D}/}"
+    FILES=$(find $D -type f -name "$F" -print)
+fi
+
 
 tmpcopyright=$(mktemp /tmp/addcopyright.XXXXXX)
 
@@ -30,10 +40,13 @@ if [[ -v "addpost[$STYLE]" ]] ; then echo "${addpost[$STYLE]}" >> $tmpcopyright;
 COPYRIGHTLEN=$(wc -l $tmpcopyright)
 
 ## Solution found as part of this stackoverflow discussion: https://stackoverflow.com/questions/151677/tool-for-adding-license-headers-to-source-files
-tmpsrcfile=$(mktemp /tmp/addcopyright.XXXXXX)
-for x in *; do
-    echo "doing $x"
-    head -$COPYRIGHTLEN $x | diff copyright.txt - || ( (cat $tmpcopyright; echo; cat $x) > $tmpsrcfile; mv $tmpsrcfile $x )
+for x in $FILES; do
+    tmpsrcfile=$(mktemp /tmp/addcopyright.XXXXXX)
+    head -$COPYRIGHTLEN $x | diff -q copyright.txt - > /dev/null
+    if [[ $? == 1 ]]; then
+	(cat $tmpcopyright; echo; cat $x) > $tmpsrcfile
+	mv $tmpsrcfile $x
+    fi
 done
 
 rm -f $tmpcopyright $tmpsrcfile
